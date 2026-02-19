@@ -5,15 +5,13 @@ read -p "Host Name: " name
 read -p "Ip: " ip
 read -p "How many times have you run this: " serial
 
-
-
 cp -rp /var/named /root/bind_backup.d
 cp -rp /etc/named.conf /root/named.conf.bak
 
 if [ ! -d /var/named/zones ]; then
         mkdir /var/named/zones
 fi
-# append "include "/etc/named/team-zones.conf"; to the named.conf file 
+
 touch /var/named/zones/forward.ncaecybergames.org
 touch  /var/named/zones/reverse.ncaecybergames.org
 touch  /var/named/zones/forward.team.net
@@ -22,7 +20,7 @@ touch  /var/named/zones/reverse.team.net
 cat << done > /etc/named.conf
 
 options {
-	listen-on port 53 { 127.0.0.1; };
+	listen-on port 53 { any; };
 	listen-on-v6 port 53 { ::1; };
 	directory 	"/var/named";
 	dump-file 	"/var/named/data/cache_dump.db";
@@ -30,7 +28,7 @@ options {
 	memstatistics-file "/var/named/data/named_mem_stats.txt";
 	secroots-file	"/var/named/data/named.secroots";
 	recursing-file	"/var/named/data/named.recursing";
-	allow-query     { localhost; };
+	allow-query     { any; };
 
 	recursion yes;
 
@@ -60,11 +58,11 @@ zone "." IN {
 
 include "/etc/named.rfc1912.zones";
 include "/etc/named.root.key";
-include "/etc/named/team-zones.conf";
+include "/etc/named.team-zones.conf";
 done 
 
 cat << done > /etc/named.team-zones.conf
-zone "team$team.ncaecybergames.org" IN {
+zone "vce$team.ncaecybergames.org" IN {
         type master;
         file "/var/named/zones/forward.ncaecybergames.org";
 };
@@ -74,7 +72,7 @@ zone "18.172.in-addr.arpa" IN {
         file "/var/named/zones/reverse.ncaecybergames.org";
 };
 
-zone "team$team.net" IN {
+zone "vce$team.net" IN {
         type master;
         file "/var/named/zones/forward.team.net";
 };
@@ -87,14 +85,14 @@ done
 
 cat << done > /var/named/zones/forward.ncaecybergames.org
 \$TTL    86400
-@       IN      SOA     team$team.ncaecybergames.org root (
+@       IN      SOA     vce$team.ncaecybergames.org. root.vce$team.ncaecybergames.org. (
                               $serial         ; Serial
                          604800         ; Refresh
                           86400         ; Retry
                         2419200         ; Expire
                           86400 )       ; Negative Cache TTL
 ;
-@       IN      NS      $name
+@       IN      NS      $name.
 $name   IN      A       $ip
 ns1     IN      A       172.18.13.$team
 www     IN      A       172.18.13.$team
@@ -104,7 +102,7 @@ done
 
 cat << done > /var/named/zones/reverse.ncaecybergames.org
 \$TTL    86400
-@       IN      SOA     team$team.ncaecybergames.org. root.team$team.ncaecybergames.org. (
+@       IN      SOA     vce$team.ncaecybergames.org. root.vce$team.ncaecybergames.org. (
                               $serial         ; Serial
                          604800         ; Refresh
                           86400         ; Retry
@@ -112,22 +110,22 @@ cat << done > /var/named/zones/reverse.ncaecybergames.org
                           86400 )       ; Negative Cache TTL
 ;
 @       IN      NS      $name.
-$team.13        IN      PTR     ns1.team$team.ncaecybergames.org.
-$team.13        IN      PTR     www.team$team.ncaecybergames.org.
-$team.14        IN      PTR     files.team$team.ncaecybergames.org.
-$team.14        IN      PTR     shell.team$team.ncaecybergames.org.
+13.$team        IN      PTR     ns1.vce$team.ncaecybergames.org.
+13.$team        IN      PTR     www.vce$team.ncaecybergames.org.
+14.$team        IN      PTR     files.vce$team.ncaecybergames.org.
+14.$team        IN      PTR     shell.vce$team.ncaecybergames.org.
 done
 
 cat << done > /var/named/zones/forward.team.net
 \$TTL    86400
-@       IN      SOA     team$team.net root (
+@       IN      SOA     vce$team.net. root (
                               $serial         ; Serial
                          604800         ; Refresh
                           86400         ; Retry
                         2419200         ; Expire
                           86400 )       ; Negative Cache TTL
 ;
-@       IN      NS      $name
+@       IN      NS      $name.
 $name   IN      A       $ip
 ns1     IN      A       192.168.$team.12
 www     IN      A       192.168.$team.5
@@ -136,7 +134,7 @@ done
 
 cat << done > /var/named/zones/reverse.team.net
 \$TTL    86400
-@       IN      SOA     team$team.net. root.team$team.net. (
+@       IN      SOA     vce$team.net. root.vce$team.net. (
                               $serial         ; Serial
                          604800         ; Refresh
                           86400         ; Retry
@@ -144,9 +142,9 @@ cat << done > /var/named/zones/reverse.team.net
                           86400 )       ; Negative Cache TTL
 ;
 @       IN      NS      $name.
-12      IN      PTR     ns1.team$team.net.
-7       IN      PTR     db1.team$team.net.
-5       IN      PTR     www.team$team.net.
+12      IN      PTR     ns1.vce$team.net.
+7       IN      PTR     db1.vce$team.net.
+5       IN      PTR     www.vce$team.net.
 done
 
 chown -R named:named /var/named
