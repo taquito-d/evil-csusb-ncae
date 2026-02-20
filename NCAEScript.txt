@@ -1,12 +1,10 @@
 #!/bin/bash
 
-read -p "Team Number: " team
-read -p "Host Name: " name
-read -p "Ip: " ip
 read -p "How many times have you run this: " serial
 
-cp -rp /var/named /root/bind_backup.d
-cp -rp /etc/named.conf /root/named.conf.bak
+team=14
+named="localhost"
+ip=192.168.$team.12
 
 if [ ! -d /var/named/zones ]; then
         mkdir /var/named/zones
@@ -20,28 +18,29 @@ touch  /var/named/zones/reverse.team.net
 cat << done > /etc/named.conf
 
 options {
-	listen-on port 53 { any; };
-	listen-on-v6 port 53 { ::1; };
-	directory 	"/var/named";
-	dump-file 	"/var/named/data/cache_dump.db";
-	statistics-file "/var/named/data/named_stats.txt";
-	memstatistics-file "/var/named/data/named_mem_stats.txt";
-	secroots-file	"/var/named/data/named.secroots";
-	recursing-file	"/var/named/data/named.recursing";
-	allow-query     { any; };
+listen-on port 53 { any; };
+listen-on-v6 port 53 { none; };
+directory "/var/named";
+dump-file "/var/named/data/cache_dump.db";
+statistics-file "/var/named/data/named_stats.txt";
+memstatistics-file "/var/named/data/named_mem_stats.txt";
+secroots-file "/var/named/data/named.secroots";
+recursing-file "/var/named/data/named.recursing";
+allow-query     { any; };
+allow-update {none;};
 
-	recursion yes;
+recursion no;
 
-	dnssec-validation yes;
+dnssec-validation yes;
 
-	managed-keys-directory "/var/named/dynamic";
-	geoip-directory "/usr/share/GeoIP";
+managed-keys-directory "/var/named/dynamic";
+geoip-directory "/usr/share/GeoIP";
 
-	pid-file "/run/named/named.pid";
-	session-keyfile "/run/named/session.key";
+pid-file "/run/named/named.pid";
+session-keyfile "/run/named/session.key";
 
-	/* https://fedoraproject.org/wiki/Changes/CryptoPolicy */
-	include "/etc/crypto-policies/back-ends/bind.config";
+/* https://fedoraproject.org/wiki/Changes/CryptoPolicy */
+include "/etc/crypto-policies/back-ends/bind.config";
 };
 
 logging {
@@ -52,34 +51,42 @@ logging {
 };
 
 zone "." IN {
-	type hint;
-	file "named.ca";
+type hint;
+file "named.ca";
 };
 
 include "/etc/named.rfc1912.zones";
 include "/etc/named.root.key";
 include "/etc/named.team-zones.conf";
-done 
+done
 
 cat << done > /etc/named.team-zones.conf
 zone "vce$team.ncaecybergames.org" IN {
         type master;
         file "/var/named/zones/forward.ncaecybergames.org";
+        allow-transfer { none; };
+
 };
 
 zone "18.172.in-addr.arpa" IN {
         type master;
         file "/var/named/zones/reverse.ncaecybergames.org";
+        allow-transfer { none; };
+
 };
 
 zone "vce$team.net" IN {
         type master;
         file "/var/named/zones/forward.team.net";
+        allow-transfer { none; };
+
 };
 
 zone "$team.168.192.in-addr.arpa" IN {
         type master;
         file "/var/named/zones/reverse.team.net";
+        allow-transfer { none; };
+
 };
 done
 
@@ -110,10 +117,10 @@ cat << done > /var/named/zones/reverse.ncaecybergames.org
                           86400 )       ; Negative Cache TTL
 ;
 @       IN      NS      $name.
-13.$team        IN      PTR     ns1.vce$team.ncaecybergames.org.
-13.$team        IN      PTR     www.vce$team.ncaecybergames.org.
-14.$team        IN      PTR     files.vce$team.ncaecybergames.org.
-14.$team        IN      PTR     shell.vce$team.ncaecybergames.org.
+$team.13        IN      PTR     ns1.vce$team.ncaecybergames.org.
+$team.13        IN      PTR     www.vce$team.ncaecybergames.org.
+$team.14        IN      PTR     files.vce$team.ncaecybergames.org.
+$team.14        IN      PTR     shell.vce$team.ncaecybergames.org.
 done
 
 cat << done > /var/named/zones/forward.team.net
@@ -147,6 +154,9 @@ cat << done > /var/named/zones/reverse.team.net
 5       IN      PTR     www.vce$team.net.
 done
 
-chown -R named:named /var/named
+chown -R named:named /var/named/zones
+chmod 640 /var/named/zones
+chmod 640 /var/named/zones/*
+
 systemctl restart named
 systemctl status named
