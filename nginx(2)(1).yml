@@ -1,0 +1,126 @@
+---
+- name: Install and configure Nginx web server (with nftables)
+  hosts: web
+  become: true
+  gather_facts: true
+
+  vars:
+    site_title: "Hello from Nginx (Ansible)"
+    site_message: "Nginx is installed and serving this page."
+    ssh_port: 22
+    allowed_tcp_ports:
+      - 80   # HTTP
+      # - 443 # HTTPS (uncomment if/when you enable TLS)
+
+  tasks:
+    - name: Install Nginx (Debian/Ubuntu)
+      ansible.builtin.apt:
+        name: nginx
+        state: present
+        update_cache: true
+      when: ansible_facts.os_family == "Debian"
+
+    - name: Install Nginx (RHEL-family)
+      ansible.builtin.yum:
+        name: nginx
+        state: present
+      when: ansible_facts.os_family == "RedHat"
+
+    - name: Deploy index.html to the default web root
+      ansible.builtin.copy:
+        dest: /var/www/html/index.html
+        mode: "0644"
+        content: |
+          <!doctype html>
+          <html>
+            <head><meta charset="utf-8"><title>{{ site_title }}</title></head>
+            <body style="font-family: Arial, sans-serif;">
+              <h1>{{ site_title }}</h1>
+              <p>{{ site_message }}</p>
+              <hr>
+              <p><strong>Host:</strong> {{ inventory_hostname }}</p>
+            </body>
+          </html>
+
+    - name: Ensure Nginx is running and enabled
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true
+
+    - name: Install nftables
+      ansible.builtin.package:
+        name: nftables
+        state: present
+
+    - name: Write nftables ruleset (safe baseline: allow SSH + HTTP)
+      ansible.builtin.copy:
+        dest: /etc/nftables.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          # Managed by Ansible - nftables ruleset
+          flush ruleset
+
+          table inet filter {
+            chain input {
+              type filter hook input priority 0;
+              policy drop;
+
+              # Accept established/related traffic
+              ct state established,related accept
+
+              # Allow loopback
+              iif "lo" accept
+
+              # Allow ICMP / ICMPv6 (ping, ND, etc.)
+              ip protocol icmp accept
+              ip6 nexthdr icmpv6 accept
+
+              # Allow SSH (avoid locking yourself out)
+              tcp dport {{ ssh_port }} accept
+
+              # Allow selected TCP ports
+              {% for p in allowed_tcp_ports %}
+              tcp dport {{ p }} accept
+              {% endfor %}
+            }
+
+            chain forward {
+              type filter hook forward priority 0;
+              policy drop;
+            }
+
+            chain output {
+              type filter hook output priority 0;
+              policy accept;
+            }
+          }
+      notify: Validate and apply nftables
+
+    - name: Ensure nftables service is enabled and started
+      ansible.builtin.service:
+        name: nftables
+        state: started
+        enabled: true
+
+  handlers:
+    - name: Validate and apply nftables
+      listen: Validate and apply nftables
+      become: true
+      block:
+        - name: Validate nftables config
+          ansible.builtin.command: nft -c -f /etc/nftables.conf
+          changed_when: false
+
+        - name: Load nftables ruleset
+          ansible.builtin.command: nft -f /etc/nftables.conf
+          changed_when: true
+
+        - name: Restart nftables service (ensure persistence on reboot)
+          ansible.builtin.service:
+            name: nftables
+            state: restarted
+
+
