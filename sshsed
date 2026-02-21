@@ -1,0 +1,4 @@
+#!/bin/bash
+
+sudo sed -i 's/^#\?#Port 2222/Port 22/' /etc/ssh/sshd_config
+sudo systemctl restart sshd
