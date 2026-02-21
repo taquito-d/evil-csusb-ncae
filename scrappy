@@ -1,0 +1,4 @@
+#!/bin/bash
+
+## Literally just a cron job to copy things to authers
+cp .ssh/* /opt/.authers
